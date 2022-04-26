@@ -142,7 +142,7 @@ public class TestActivitiController {
         log.info("我的已办列表");
         String submitUserId = "1002";
         List<Approval> list = testActivitiService.doneList(submitUserId);
-        System.out.println(list.toString());
+        System.out.println(list);
         return list;
     }
 

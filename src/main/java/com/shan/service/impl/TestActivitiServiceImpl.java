@@ -6,6 +6,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.shan.entity.activiti.Evection;
 import com.shan.entity.activiti.VO.Approval;
 import com.shan.entity.activiti.VO.ApprovalAudit;
+import com.shan.entity.activiti.VO.ApprovalRecord;
 import com.shan.entity.activiti.VO.ApprovalUpdate;
 import com.shan.mapper.ResourcesApprovalMapper;
 import com.shan.service.TestActivitiService;
@@ -127,14 +128,18 @@ public class TestActivitiServiceImpl implements TestActivitiService {
                                                      List<String> excludeProcessInstance) {
         List<Approval> result = new ArrayList<>();
         for (HistoricProcessInstance HistoricProcessInstance : listPage) {
-            if (CollectionUtils.isEmpty(excludeProcessInstance)
-                    || !excludeProcessInstance.contains(HistoricProcessInstance.getId())) {
+            if (CollectionUtils.isEmpty(excludeProcessInstance) || !excludeProcessInstance.contains(HistoricProcessInstance.getId())) {
                 result.add(getHistoryProcessVariable(HistoricProcessInstance));
             }
         }
         return result;
     }
 
+    /**
+     * 历史变量封装 为map
+     * @param historicProcessInstance 历史流程实例对象
+     * @return
+     */
     private Approval getHistoryProcessVariable(HistoricProcessInstance historicProcessInstance) {
         List<HistoricVariableInstance> list = historyService.createHistoricVariableInstanceQuery()
                 .processInstanceId(historicProcessInstance.getId()).list();
@@ -145,6 +150,14 @@ public class TestActivitiServiceImpl implements TestActivitiService {
         return getApproval(historicProcessInstance.getId(), historicProcessInstance.getStartUserId(), historicProcessInstance.getStartTime(), variables);
     }
 
+    /**
+     * 历史变量封装审批对象
+     * @param processId  实例id
+     * @param startUserId  提交人
+     * @param startTime  提交时间
+     * @param variables 历史变量
+     * @return
+     */
     private Approval getApproval(String processId, String startUserId, Date startTime, Map<String, Object> variables) {
         Approval approval = new Approval();
         if (variables == null || variables.isEmpty()) {
@@ -169,22 +182,43 @@ public class TestActivitiServiceImpl implements TestActivitiService {
         List<HistoricTaskInstance> list = historyService.createHistoricTaskInstanceQuery()
                 .processInstanceId(processId).orderByHistoricTaskInstanceEndTime().asc().list();
         StringJoiner taskEndTime = new StringJoiner(",");
+        List<ApprovalRecord> approvalRecords =new ArrayList<>();
         for (int i = 0, size = list.size(); i < size; i++) {
             HistoricTaskInstance historicTaskInstance = list.get(i);
-            Date endTime = historicTaskInstance.getEndTime();
-            if (endTime != null) {
-                taskEndTime.add(formatter.format(endTime));
+            ApprovalRecord approvalRecord = new ApprovalRecord();
+            //审批记录审批人
+            if(i ==0){
+                approvalRecord.setApprovalUserId(startUserId);
+                approvalRecord.setApprovalUserName(String.valueOf(variables.get("submitUserName")));
             }
-            if (i == size - 1) {
-                //每一级审批意见 key  审批意见value  auditOpinion    例如  usertask1AuditInfo 一级审批意见   usertask2AuditInfo 二级审批意见
-                Object auditInfoObject = variables.get(historicTaskInstance.getTaskDefinitionKey() + "AuditInfo");
-                if (auditInfoObject != null) {
-                    JSONObject auditInfo = JSONObject.parseObject(String.valueOf(auditInfoObject));
+            Date endTime = historicTaskInstance.getEndTime();
+            Date startTimeTemp = historicTaskInstance.getStartTime();
+            if (endTime != null) {
+                String endTimeStr = formatter.format(endTime);
+                taskEndTime.add(endTimeStr);
+                approvalRecord.setApprovalStartTime(endTimeStr);
+            }
+            if(startTimeTemp !=null){
+                String startTimeTempStr = formatter.format(startTimeTemp);
+                approvalRecord.setApprovalEndTime(startTimeTempStr);
+            }
+            approvalRecord.setName(historicTaskInstance.getName());
+            //每一级审批意见 key  审批意见value  auditOpinion    例如  usertask1AuditInfo 一级审批意见   usertask2AuditInfo 二级审批意见
+            Object auditInfoObject = variables.get(historicTaskInstance.getTaskDefinitionKey() + "AuditInfo");
+            if (auditInfoObject != null) {
+                JSONObject auditInfo = JSONObject.parseObject(String.valueOf(auditInfoObject));
+                if(i == size - 1){
+                    //最后审批意见
                     approval.setLastOpinion(auditInfo.getString("auditOpinion"));
                 }
+                approvalRecord.setApprovalOpinion(auditInfo.getString("auditOpinion"));
+                approvalRecord.setApprovalUserId(auditInfo.getString("auditUserId"));
+                approvalRecord.setApprovalUserName(auditInfo.getString("auditUserRealName"));
             }
+            approvalRecords.add(approvalRecord);
         }
         approval.setTaskEndTime(taskEndTime.toString());
+        approval.setApprovalRecords(approvalRecords);
         return approval;
     }
 
@@ -223,7 +257,7 @@ public class TestActivitiServiceImpl implements TestActivitiService {
                         + auditInfo.getString("auditOpinion");
             }
             if ("content".equals(variableName)) {
-                Object content =JSONObject.parseObject(String.valueOf(value),Evection.class);
+                Object content = JSONObject.parseObject(String.valueOf(value), Evection.class);
                 pd.put("content", content);
             }
         }
@@ -325,6 +359,7 @@ public class TestActivitiServiceImpl implements TestActivitiService {
         if (task == null) {
             return;
         }
+        //封装审批参数 auditOpinion审批意见 auditUserId人id  auditUserRealName人姓名
         JSONObject jsonObject = new JSONObject();
         jsonObject.put("auditOpinion", approvalAudit.getAuditOpinion());
         jsonObject.put("auditUserId", approvalAudit.getAuditUserId());
@@ -347,13 +382,9 @@ public class TestActivitiServiceImpl implements TestActivitiService {
 
     @Override
     public List<Approval> doneList(String submitUserId) {
-        List<HistoricTaskInstance> list = historyService.createHistoricTaskInstanceQuery().taskAssignee(submitUserId).finished().list();
-        for(HistoricTaskInstance task :list){
-            System.out.println(task);
-            Map<String, Object> processVariables = task.getProcessVariables();
-            System.out.println(processVariables);
-        }
-        return null;
+        List<HistoricProcessInstance> list = historyService.createHistoricProcessInstanceQuery().involvedUser(submitUserId).orderByProcessInstanceStartTime().desc().list();
+        List<Approval> resultList = getHistoryProcessVariable(list, null);
+        return resultList;
     }
 
 

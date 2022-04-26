@@ -16,9 +16,10 @@ public class ApprovalExecutionListener implements ExecutionListener {
 
     @Override
     public void notify(DelegateExecution execution) {
-        System.out.println("审批通过调用notify："+execution.getEventName());
+        System.out.println("ApprovalExecutionListener审批通过调用notify：" + execution.getEventName());
+        //审批结束会进此方法 改审通过状态 并调业务方法入库
         if ("end".equals(execution.getEventName())) {
-            System.out.println("审批通过调用："+execution.getEventName());
+            System.out.println("ApprovalExecutionListener审批通过调用：" + execution.getEventName());
             RuntimeService runtimeService = SpringContextUtils.getBean("runtimeServiceBean", RuntimeService.class);
             String processInstanceId = execution.getProcessInstanceId();
             // 维护状态值
@@ -29,16 +30,13 @@ public class ApprovalExecutionListener implements ExecutionListener {
 
 
             String approvalType = runtimeService.getVariable(processInstanceId, "approvalType", String.class);
-            System.out.println("审批通过调用"+processInstanceId);
+            System.out.println("ApprovalExecutionListener审批通过调用" + processInstanceId);
             System.out.println(approvalType);
             //保存业务数据EvectionService
             EvectionService evectionService = SpringContextUtils.getBean("evectionServiceImpl", EvectionService.class);
             evectionService.saveEvection(processInstanceId);
         }
     }
-
-
-
 
 
 }

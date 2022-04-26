@@ -15,12 +15,14 @@ public class ApprovalTaskListener implements TaskListener {
 
     @Override
     public void notify(DelegateTask delegateTask) {
-        System.out.println("ApprovalTaskListener--notify调用:"+delegateTask.getEventName());
+        System.out.println("ApprovalTaskListener--notify调用:" + delegateTask.getEventName());
+        //create创建流程时  会获取一级审批人并设置审批人
         if (EVENTNAME_CREATE.equals(delegateTask.getEventName())) {
             // 获取当前任务节点的审批人
             List<String> list = findTaskCandidateUsers(delegateTask);
             delegateTask.addCandidateUsers(list);
         }
+        //每次complete时 会更新审批进度 加1
         if (EVENTNAME_COMPLETE.equals(delegateTask.getEventName())) {
             // 维护审批进度   正常是runtimeService实例  不知道为啥spring容器加载的名称是runtimeServiceBean
             RuntimeService runtimeService = SpringContextUtils.getBean("runtimeServiceBean", RuntimeService.class);

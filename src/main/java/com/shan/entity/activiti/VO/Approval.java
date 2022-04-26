@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
+import java.util.List;
+
 /**
  * 审批VO
  */
@@ -61,5 +63,8 @@ public class Approval {
 
 	// 最后一级审批意见
 	private String lastOpinion;
+
+	//审批记录
+	private List<ApprovalRecord> approvalRecords;
 
 }
